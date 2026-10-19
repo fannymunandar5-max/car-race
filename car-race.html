@@ -1,0 +1,409 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>NEON OVERDRIVE</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#030611;color:white;
+font-family:system-ui,Arial;user-select:none}
+canvas{display:block}
+#hud{position:fixed;inset:0;padding:17px;pointer-events:none}
+.logo{font-weight:1000;font-size:clamp(20px,4vw,34px);
+letter-spacing:3px;color:#65faff;text-shadow:0 0 22px #00cfff}
+.small{font-size:10px;letter-spacing:3px;color:#a5b9d8}
+.stats{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.stat{background:#071329cc;border:1px solid #45efff66;
+padding:9px 13px;border-radius:10px;min-width:85px}
+.label{font-size:10px;letter-spacing:2px;color:#94accd}
+.value{font-size:22px;font-weight:900}
+#nitroBox{position:absolute;top:20px;right:18px;width:110px}
+.track{height:7px;background:#172039;border-radius:9px;margin-top:6px;overflow:hidden}
+#nitroFill{height:100%;width:100%;background:#62faff;box-shadow:0 0 12px #00eaff}
+#overlay{position:fixed;inset:0;z-index:5;display:flex;align-items:center;
+justify-content:center;background:#030511bb;backdrop-filter:blur(7px);padding:20px}
+.panel{width:min(460px,100%);padding:28px 23px;text-align:center;
+background:linear-gradient(145deg,#111c39f5,#080817f5);
+border:1px solid #55faff88;border-radius:23px;box-shadow:0 0 60px #00dfff18}
+h1{font-size:clamp(36px,8vw,60px);line-height:.98;margin:15px 0;
+color:#75faff;text-shadow:0 0 30px #00dfff}
+p{font-size:14px;line-height:1.7;color:#bdcbe0}
+button{pointer-events:auto;border:1px solid #63faff88;background:#081a30;
+color:#8cffff;border-radius:13px;padding:13px 17px;font:inherit;
+font-weight:900;touch-action:none}
+#start{width:100%;margin-top:10px;background:linear-gradient(90deg,#65faff,#b5ffd3);
+border:0;color:#06101b;letter-spacing:2px;padding:16px}
+#mobile{position:fixed;bottom:20px;left:0;right:0;display:flex;
+justify-content:space-between;align-items:end;padding:0 18px;pointer-events:none}
+.controls{display:flex;gap:9px;pointer-events:auto}
+.touch{width:60px;height:60px;font-size:23px;background:#07172ccc}
+#boost{width:72px;height:72px;border-radius:50%;border-color:#ff5ac6;
+color:#ff9cde;background:#40102dcc;font-size:13px}
+#tip{position:fixed;bottom:6px;left:0;right:0;text-align:center;
+font-size:10px;letter-spacing:2px;color:#9cb2cf;pointer-events:none}
+@media(min-width:800px){#mobile{opacity:.55}}
+</style>
+</head>
+<body>
+<div id="hud">
+ <div class="logo">NEON <span style="color:white">OVERDRIVE</span></div>
+ <div class="small">NIGHT CITY // STREET LEGENDS</div>
+ <div class="stats">
+  <div class="stat"><div class="label">SCORE</div><div class="value" id="score">0</div></div>
+  <div class="stat"><div class="label">SPEED</div><div class="value"><span id="speed">0</span><small> km/h</small></div></div>
+  <div class="stat"><div class="label">CHECKPOINT</div><div class="value" id="cp">0/5</div></div>
+ </div>
+ <div id="nitroBox"><div class="label">NITRO CHARGE ⚡</div>
+ <div class="track"><div id="nitroFill"></div></div></div>
+</div>
+<div id="overlay"><div class="panel">
+ <div class="small">WELCOME TO THE FUTURE</div>
+ <h1 id="title">NEON<br>OVERDRIVE</h1>
+ <p id="desc">Malam milikmu. Jalanan adalah arena.<br>
+ Hindari lalu lintas, aktifkan nitro, dan taklukkan lima checkpoint!</p>
+ <p>← → / A D : Belok<br>↑ / W : Gas • ↓ / S : Rem<br>
+ SHIFT / ⚡ : Nitro</p>
+ <button id="start">▶ START ENGINE</button>
+ <p style="font-size:10px;letter-spacing:2px">NO BRAKES. NO FEAR. NO LIMITS.</p>
+ </div></div>
+<div id="mobile">
+ <div class="controls">
+  <button class="touch" id="left">◀</button>
+  <button class="touch" id="right">▶</button>
+ </div>
+ <div class="controls">
+  <button class="touch" id="brake">▼</button>
+  <button class="touch" id="gas">▲</button>
+  <button id="boost">⚡<br>NITRO</button>
+ </div>
+</div>
+<div id="tip">DRIVE • DRIFT • BOOST • CONQUER THE CITY</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x05091b);
+scene.fog=new THREE.FogExp2(0x05091b,.009);
+const camera=new THREE.PerspectiveCamera(66,innerWidth/innerHeight,.1,350);
+camera.position.set(0,5,12);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.25;
+document.body.prepend(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0x9bbdff,0x171027,2));
+const sun=new THREE.DirectionalLight(0x8cbaff,2);
+sun.position.set(-8,20,8);scene.add(sun);
+const neonLight=new THREE.PointLight(0x00dfff,55,65);
+neonLight.position.set(0,8,-15);scene.add(neonLight);
+
+function material(color,emissive=0,intensity=.5,metalness=.25){
+ return new THREE.MeshStandardMaterial({color,emissive,
+ emissiveIntensity:intensity,metalness,roughness:.35});
+}
+const roadMat=material(0x101526,0x080d1b,.3,.2);
+const cyan=material(0x27eaff,0x00cfff,2);
+const pink=material(0xff32b9,0xff0088,2);
+const gold=material(0xffce62,0xff9000,1.5);
+const white=material(0xdcecff,0x173b69,.4,.8);
+
+// Road and lane markers
+const road=new THREE.Mesh(new THREE.PlaneGeometry(19,500),roadMat);
+road.rotation.x=-Math.PI/2;road.position.set(0,-.12,-180);scene.add(road);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(500,500),
+material(0x070b19));
+ground.rotation.x=-Math.PI/2;ground.position.set(0,-.24,-180);scene.add(ground);
+const laneMarks=[];
+for(let x of [-3.2,3.2]){
+ for(let i=0;i<36;i++){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(.09,.025,3.4),cyan);
+  m.position.set(x,-.075,-i*10);scene.add(m);laneMarks.push(m);
+ }
+}
+for(let x of [-9.2,9.2]){
+ const line=new THREE.Mesh(new THREE.BoxGeometry(.18,.07,500),pink);
+ line.position.set(x,-.02,-180);scene.add(line);
+}
+
+// Procedural neon city buildings
+const buildings=[];
+const buildingColors=[0x122448,0x23133c,0x101e32,0x301638,0x102d3d];
+for(let side of [-1,1]){
+ for(let i=0;i<58;i++){
+  const w=2+Math.random()*5,h=5+Math.random()*24,d=3+Math.random()*6;
+  const g=new THREE.Group();
+  const shell=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),
+  material(buildingColors[Math.floor(Math.random()*buildingColors.length)],0x080d2a,.6,.45));
+  shell.position.y=h/2;g.add(shell);
+  const edgeMat=Math.random()<.5?cyan:pink;
+  const edge=new THREE.Mesh(new THREE.BoxGeometry(w+.04,.1,d+.04),edgeMat);
+  edge.position.y=h;g.add(edge);
+  // Glowing windows
+  for(let j=0;j<Math.min(16,Math.floor(h/1.7));j++){
+   for(let k=0;k<2;k++){
+    if(Math.random()<.4)continue;
+    const win=new THREE.Mesh(new THREE.BoxGeometry(.13,.38,.035),
+     Math.random()<.65?cyan:gold);
+    win.position.set((k-.5)*w*.55,h*.2+j*h*.055,d/2+.02);g.add(win);
+   }
+  }
+  g.position.set(side*(13+Math.random()*13),0,-i*13-Math.random()*10);
+  scene.add(g);buildings.push({g,side,w,h,d});
+ }
+}
+
+// Flying cars in the skyline
+const flyers=[];
+for(let i=0;i<9;i++){
+ const g=new THREE.Group();
+ const b=new THREE.Mesh(new THREE.BoxGeometry(1.5,.4,2.5),white);g.add(b);
+ for(let s of [-1,1]){
+  const l=new THREE.Mesh(new THREE.BoxGeometry(.12,.12,1.7),s===1?cyan:pink);
+  l.position.set(s*.65,-.15,0);g.add(l);
+ }
+ g.position.set((Math.random()-.5)*38,5+Math.random()*12,-Math.random()*180);
+ scene.add(g);flyers.push(g);
+}
+
+// Player car model
+const car=new THREE.Group();scene.add(car);
+const chassis=new THREE.Mesh(new THREE.BoxGeometry(1.75,.48,3.5),
+material(0x101a32,0x0c3277,.8,.8));
+chassis.position.y=.5;car.add(chassis);
+const cabin=new THREE.Mesh(new THREE.BoxGeometry(1.22,.55,1.65),
+material(0x163653,0x007cff,.7,.8));
+cabin.position.set(0,.94,-.18);car.add(cabin);
+const hood=new THREE.Mesh(new THREE.BoxGeometry(1.4,.14,.95),
+material(0x162342,0x00bfff,1,.75));
+hood.position.set(0,.77,-1.12);car.add(hood);
+for(let s of [-1,1]){
+ const head=new THREE.Mesh(new THREE.BoxGeometry(.46,.11,.08),cyan);
+ head.position.set(s*.54,.53,-1.77);car.add(head);
+ const tail=new THREE.Mesh(new THREE.BoxGeometry(.48,.12,.08),pink);
+ tail.position.set(s*.53,.53,1.77);car.add(tail);
+ const wheelGeo=new THREE.CylinderGeometry(.35,.35,.24,16);
+ for(let z of [-1.1,1.1]){
+  const wheel=new THREE.Mesh(wheelGeo,material(0x080a12,0,0,.2));
+  wheel.rotation.z=Math.PI/2;
+  wheel.position.set(s*.89,.35,z);car.add(wheel);
+ }
+ const trail=new THREE.Mesh(new THREE.BoxGeometry(.17,.12,1.8),cyan);
+ trail.position.set(s*.5,.28,2.45);car.add(trail);
+}
+car.position.set(0,0,3);
+
+// Gates, traffic and particles
+const traffic=[],gates=[],particles=[];
+function makeTraffic(){
+ const g=new THREE.Group();
+ const colors=[0xff2d86,0xffb73c,0x8d65ff,0x3dfff1];
+ const c=colors[Math.floor(Math.random()*colors.length)];
+ const body=new THREE.Mesh(new THREE.BoxGeometry(1.65,.65,3),material(c,c,.8,.65));
+ body.position.y=.48;g.add(body);
+ const glass=new THREE.Mesh(new THREE.BoxGeometry(1.15,.4,1.2),
+ material(0x152a49,0x165cff,.6,.7));
+ glass.position.set(0,.87,-.1);g.add(glass);
+ for(let s of [-1,1]){
+  const l=new THREE.Mesh(new THREE.BoxGeometry(.32,.1,.06),gold);
+  l.position.set(s*.48,.5,-1.53);g.add(l);
+ }
+ scene.add(g);
+ g.position.set([-6.3,-2.1,2.1,6.3][Math.floor(Math.random()*4)],0,-180);
+ traffic.push({g,passed:false});
+}
+function makeGate(){
+ const g=new THREE.Group();
+ for(let x of [-2.8,2.8]){
+  const pole=new THREE.Mesh(new THREE.BoxGeometry(.16,5,.16),pink);
+  pole.position.set(x,2.5,0);g.add(pole);
+ }
+ const top=new THREE.Mesh(new THREE.BoxGeometry(5.7,.15,.15),cyan);
+ top.position.y=5;g.add(top);
+ const ring=new THREE.Mesh(new THREE.TorusGeometry(1.1,.09,8,32),gold);
+ ring.position.set(0,2.5,.1);g.add(ring);
+ scene.add(g);g.position.set(0,0,-190);
+ gates.push(g);
+}
+let running=false,score=0,checkpoints=0,velocity=0,nitro=100;
+let x=0,steer=0,spawnClock=0,gateClock=0,shake=0;
+const keys={};
+function start(){
+ score=0;checkpoints=0;velocity=0;nitro=100;x=0;steer=0;
+ spawnClock=0;gateClock=0;shake=0;
+ for(const t of traffic)scene.remove(t.g);traffic.length=0;
+ for(const g of gates)scene.remove(g);gates.length=0;
+ for(const p of particles)scene.remove(p.m);particles.length=0;
+ for(const b of buildings){
+  b.g.position.z=-Math.random()*600-20;
+ }
+ laneMarks.forEach((m,i)=>m.position.z=-(i%36)*10);
+ car.position.set(0,0,3);car.rotation.set(0,0,0);
+ running=true;$('overlay').style.display='none';updateHUD();
+ makeGate();makeGate();gates[1].position.z=-390;
+}
+function updateHUD(){
+ $('score').textContent=Math.floor(score);
+ $('speed').textContent=Math.floor(velocity*12);
+ $('cp').textContent=Math.min(checkpoints,5)+'/5';
+ $('nitroFill').style.width=nitro+'%';
+}
+$('start').onclick=start;
+addEventListener('keydown',e=>{
+ keys[e.key.toLowerCase()]=true;
+ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key))e.preventDefault();
+ if(e.key==='Enter'&&!running)start();
+});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function bind(id,key){
+ const el=$(id);
+ const down=e=>{e.preventDefault();keys[key]=true};
+ const up=e=>{e.preventDefault();keys[key]=false};
+ el.addEventListener('pointerdown',down);
+ el.addEventListener('pointerup',up);
+ el.addEventListener('pointercancel',up);
+ el.addEventListener('pointerleave',up);
+}
+bind('left','a');bind('right','d');bind('gas','w');bind('brake','s');bind('boost','shift');
+
+function endGame(win){
+ running=false;
+ $('title').innerHTML=win?'CITY<br>CHAMPION':'RACE<br>OVER';
+ $('desc').innerHTML=(win?'YOU OWN THE NIGHT!':'The city wins this round.')+
+ '<br><br>SCORE: <b>'+Math.floor(score)+'</b><br>CHECKPOINT: '+checkpoints+
+ '<br><br>Can you beat your record?';
+ $('start').textContent='↻ RACE AGAIN';
+ $('overlay').style.display='flex';
+}
+function burst(pos){
+ for(let i=0;i<12;i++){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(.09,.09,.09),
+   Math.random()<.5?cyan:pink);
+  m.position.copy(pos);scene.add(m);
+  particles.push({m,v:new THREE.Vector3(Math.random()-.5,
+   Math.random(),Math.random()-.5).multiplyScalar(6),life:.8});
+ }
+}
+const clock=new THREE.Clock();
+function tick(){
+ requestAnimationFrame(tick);
+ const dt=Math.min(clock.getDelta(),.04),t=clock.elapsedTime;
+
+ if(running){
+  const gas=keys.w||keys.arrowup;
+  const brake=keys.s||keys.arrowdown;
+  const boost=keys.shift;
+  if(gas)velocity=Math.min(velocity+dt*15,27);
+  else velocity=Math.max(velocity-dt*2.3,9);
+  if(brake)velocity=Math.max(velocity-dt*24,0);
+  if(boost&&nitro>0&&velocity>5){
+   velocity=Math.min(velocity+dt*25,42);
+   nitro=Math.max(0,nitro-dt*27);
+   burstChance();
+  }else nitro=Math.min(100,nitro+dt*5);
+
+  const turn=(keys.a||keys.arrowleft?-1:0)+(keys.d||keys.arrowright?1:0);
+  steer+=(turn-steer)*Math.min(1,dt*8);
+  x+=steer*dt*(2.5+velocity*.36);
+  x=THREE.MathUtils.clamp(x,-7.3,7.3);
+  car.position.x=THREE.MathUtils.damp(car.position.x,x,8,dt);
+  car.rotation.z=THREE.MathUtils.damp(car.rotation.z,-steer*.12,7,dt);
+  car.rotation.y=THREE.MathUtils.damp(car.rotation.y,-steer*.07,7,dt);
+
+  const worldSpeed=velocity*dt*2.5;
+  score+=worldSpeed*.5;
+  spawnClock+=dt;gateClock+=dt;
+  if(spawnClock>Math.max(.5,1.65-velocity*.025)){
+   spawnClock=0;makeTraffic();
+  }
+  if(gateClock>13&&gates.length<5){
+   gateClock=0;makeGate();
+  }
+
+  for(const m of laneMarks){
+   m.position.z+=worldSpeed;
+   if(m.position.z>10)m.position.z-=360;
+  }
+  for(const b of buildings){
+   b.g.position.z+=worldSpeed;
+   if(b.g.position.z>35){
+    b.g.position.z-=760;
+    b.g.position.x=b.side*(13+Math.random()*13);
+   }
+  }
+  for(const f of flyers){
+   f.position.z+=worldSpeed*.45;
+   f.position.x+=Math.sin(t+f.position.y)*dt*.6;
+   if(f.position.z>15)f.position.z=-230-Math.random()*100;
+  }
+  for(let i=traffic.length-1;i>=0;i--){
+   const o=traffic[i];
+   o.g.position.z+=worldSpeed*(o.g.position.z<0?1.0:.75);
+   if(!o.passed&&o.g.position.z>1){
+    o.passed=true;score+=100;
+   }
+   if(Math.abs(o.g.position.z-car.position.z)<2.1&&
+      Math.abs(o.g.position.x-car.position.x)<1.55){
+    burst(car.position);shake=.3;
+    velocity*=.48;o.g.position.z=25;o.passed=true;
+   }
+   if(o.g.position.z>28){
+    scene.remove(o.g);traffic.splice(i,1);
+   }
+  }
+  for(let i=gates.length-1;i>=0;i--){
+   const g=gates[i];g.position.z+=worldSpeed;
+   g.children[2].rotation.y+=dt*2;
+   if(g.position.z>car.position.z&&g.position.z<car.position.z+worldSpeed+1){
+    if(Math.abs(x)<2.65){
+     checkpoints++;score+=500;nitro=Math.min(100,nitro+25);
+     burst(car.position);
+     if(checkpoints>=5){updateHUD();endGame(true);break}
+    }else score=Math.max(0,score-150);
+   }
+   if(g.position.z>18){
+    scene.remove(g);gates.splice(i,1);
+   }
+  }
+  for(let i=particles.length-1;i>=0;i--){
+   const p=particles[i];p.m.position.addScaledVector(p.v,dt);
+   p.life-=dt;p.m.scale.setScalar(Math.max(0,p.life));
+   if(p.life<=0){scene.remove(p.m);particles.splice(i,1)}
+  }
+  shake=Math.max(0,shake-dt);
+  updateHUD();
+ }
+ // Cinematic chase camera
+ const target=new THREE.Vector3(car.position.x*.45,5.2,12.5);
+ camera.position.lerp(target,.06);
+ if(shake>0){
+  camera.position.x+=(Math.random()-.5)*shake;
+  camera.position.y+=(Math.random()-.5)*shake;
+ }
+ camera.lookAt(car.position.x*.3,1,-8);
+ neonLight.intensity=50+Math.sin(t*2)*10;
+ renderer.render(scene,camera);
+}
+let burstTimer=0;
+function burstChance(){
+ burstTimer-=clock.getDelta()*.15;
+ if(burstTimer<=0){
+  burstTimer=.08;
+  const m=new THREE.Mesh(new THREE.BoxGeometry(.08,.08,.5),cyan);
+  m.position.set(car.position.x+(Math.random()-.5)*.5,.25,car.position.z+2.5);
+  scene.add(m);particles.push({m,v:new THREE.Vector3(0,0,8),life:.25});
+ }
+}
+addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);
+});
+tick();
+})();
+</script>
+</body>
+</html>
